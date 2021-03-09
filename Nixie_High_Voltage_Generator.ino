@@ -1,5 +1,14 @@
-const byte neonBulb = 2, A = 4, B = 7, C = 8, D = 10, gatePin = 9, backlightPWMOut = 11, relay = 12, togglePin = A0, upButton = A1, downButton = A2,
-           digitSelectPin = A3, backlightPWMIn = A4, voltageReadPin = A5, N[] = {3, 5, 6}, clean[] = {3, 8, 9, 4, 0, 5, 7, 2, 6, 1};
+/**
+   Author: Colin Bernstein
+   Title: Nixie High Voltage DC Generator
+*/
+
+
+//Define GPIO pins and frequently used instance variables
+const byte neonBulb = 2, A = 4, B = 7, C = 8, D = 10, gatePin = 9, backlightPWMOut = 11,
+           relay = 12, togglePin = A0, upButton = A1, downButton = A2,
+           digitSelectPin = A3, backlightPWMIn = A4, voltageReadPin = A5,
+           N[] = {3, 5, 6}, clean[] = {3, 8, 9, 4, 0, 5, 7, 2, 6, 1};
 
 unsigned long timePressed, timeRefresh, lastLEDRefresh, lastCPP;
 word setVoltage, currentVoltage;
@@ -7,6 +16,7 @@ unsigned char dutyCycle = 5;
 byte currDigitValue[3], currentDigit;
 boolean outputEngaged = false, holding = false;
 
+//Initialize GPIOs and set the PWM frequency to the fastest allowed setting
 void setup() {
   pinMode(A, OUTPUT);
   pinMode(B, OUTPUT);
@@ -28,6 +38,8 @@ void setup() {
   analogWrite(gatePin, 0);
 }
 
+//Constantly multiplex tubes and check for button presses
+//Conduct cathode poisoning prevention every 300 seconds
 void loop() {
   multPlex();
   checkButton();
@@ -36,6 +48,7 @@ void loop() {
     cathodePoisoningPrevention();
 }
 
+//Flash the current digit (tube number) with the valid numerals
 void multPlex() {
   switch (currentDigit) {
     case 0:
@@ -74,10 +87,12 @@ void multPlex() {
   }
 }
 
+//Update a stored current numerical value for a tube
 void refresh(byte number, byte stage) {
   currDigitValue[stage] = number;
 }
 
+//Write the binary encoded decimal to the high voltage cathode controller
 void binOut(byte number, byte stage) {
   digitalWrite(stage == 0 ? N[2] : N[stage - 1], LOW);
   if (number == 255) {
@@ -95,6 +110,8 @@ void binOut(byte number, byte stage) {
   delay(4);
 }
 
+//Check for a specific button press and account for bounce time
+//and the holding threshold for the rapid scrolling of values
 void checkButton() {
   if (!holding) {
     if (!digitalRead(togglePin)) {
@@ -166,10 +183,15 @@ void checkButton() {
       }
     }
   }
-  else if (digitalRead(digitSelectPin) && digitalRead(togglePin) && digitalRead(upButton) && digitalRead(downButton) && millis() - timePressed >= 50)
+  else if (digitalRead(digitSelectPin) && digitalRead(togglePin)
+           && digitalRead(upButton) && digitalRead(downButton)
+           && millis() - timePressed >= 50)
     holding = false;
 }
 
+//Slowly creap the PWM from 0% to a value that yields the desired output voltage
+//Check for voltage spikes and ensure the voltage never exceeds the 
+//maximum rated voltage of the smoothing capacitors
 word adjustPulsation() {
   word currentVoltage = getCurrentVoltage();
   if (currentVoltage >= 375) {
@@ -189,6 +211,7 @@ word adjustPulsation() {
   return currentVoltage;
 }
 
+//Immidiately cut off output and halt inductor pulsing
 void emergencyShutdown() {
   analogWrite(gatePin, 0);
   digitalWrite(gatePin, LOW);
@@ -216,6 +239,8 @@ word getCurrentVoltage() {
   return analogRead(voltageReadPin) / 1.955;
 }
 
+//Run direct current through each of the cathodes for 
+//a long period at a time in an elegant pattern
 void cathodePoisoningPrevention() {
   lastCPP = millis();
   for (byte a = 0; a < 3; a++)
